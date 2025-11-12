@@ -36,7 +36,7 @@ poetry install
 ### Executar
 
 ```bash
-poetry run uvicorn src.main:app --reload
+poetry run uvicorn src.main:app
 ```
 
 ### Swagger
