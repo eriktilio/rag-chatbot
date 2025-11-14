@@ -1,0 +1,61 @@
+# Bytecode e cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Ambientes virtuais
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.env
+
+# Poetry
+
+
+# Logs e temporários
+*.log
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# Build / distribuição
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Dados locais
+data/
+uploads/
+cache/
+tmp/
+
+# Arquivos de índice FAISS e vetores salvos
+*.pkl
+*.faiss
+*.npy
+
+# Configurações do sistema
+.DS_Store
+Thumbs.db
+
+# Arquivos de ambiente e credenciais
+.env
+*.env
+credentials.json
+vertexai.json
+
+# IDEs
+.vscode/
+.idea/
+*.iml
+
+# Notebooks temporários
+.ipynb_checkpoints/
+*.ipynb
+__pycache__/
+*.pyc
