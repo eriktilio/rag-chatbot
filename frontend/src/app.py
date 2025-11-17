@@ -1,6 +1,7 @@
 import streamlit as st
-import time
 from service import rag_service
+from login import show_login_page, logout
+from admin import show_admin_page
 
 
 # --- Configuração da Página ---
@@ -11,104 +12,83 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# --- Gerenciamento de Estado da Página ---
+if "page" not in st.session_state:
+    st.session_state["page"] = "chat"
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = False
 
 # ================================
-# SIDEBAR – Gerenciamento de PDFs
+# SIDEBAR – Navegação
 # ================================
 with st.sidebar:
-    st.header("Gerenciamento de Documentos")
-
-    # ------------------------------
-    # Upload de PDF
-    # ------------------------------
-    with st.expander("📤 Upload de PDF", expanded=True):
-        uploaded_file = st.file_uploader(
-            "Selecione um arquivo PDF para adicionar à base de conhecimento.",
-            type="pdf"
-        )
-
-        if st.button("Processar e Indexar"):
-            if uploaded_file:
-                with st.spinner("Processando e indexando o arquivo..."):
-                    result = rag_service.upload_file(uploaded_file)
-
-                    if result and "error" not in result:
-                        st.success(f"Arquivo '{result.get('file')}' indexado com sucesso!")
-                        time.sleep(2)
-                        st.rerun()
-                    else:
-                        st.error(f"Erro: {result.get('error')}")
-            else:
-                st.warning("Por favor, selecione um arquivo PDF.")
-
-    # ------------------------------
-    # Lista de arquivos indexados
-    # ------------------------------
-    st.header("📄 Arquivos Indexados")
-
-    indexed_files = rag_service.get_indexed_files()
-
-    if not indexed_files or isinstance(indexed_files, dict) and "error" in indexed_files:
-        st.info("Nenhum documento indexado. Faça o upload de um PDF para começar.")
+    st.header("Navegação")
+    if st.session_state["authenticated"]:
+        st.sidebar.button("Sair", on_click=logout)
+        if st.button("Área Administrativa"):
+            st.session_state["page"] = "admin"
+            #st.rerun()
     else:
-        for file_name in indexed_files:
-            col1, col2 = st.columns([0.8, 0.2])
-
-            with col1:
-                st.text(file_name)
-
-            with col2:
-                if st.button("🗑️", key=f"delete_{file_name}", help=f"Deletar {file_name}"):
-                    with st.spinner(f"Deletando {file_name}..."):
-                        rag_service.delete_file(file_name)
-                        st.success(f"Arquivo '{file_name}' deletado.")
-                        time.sleep(2)
-                        st.rerun()
-
+        if st.button("Área Administrativa"):
+            st.session_state["page"] = "login"
+            #st.rerun()
+        if st.button("Chat"):
+            st.session_state["page"] = "chat"
+            #st.rerun()
 
 # ================================
-# CHAT PRINCIPAL
+# Roteamento de Páginas
 # ================================
-st.title("🤖 Chatbot com RAG")
-st.caption("Faça perguntas sobre os documentos que você indexou.")
+if st.session_state["page"] == "login":
+    show_login_page()
 
+elif st.session_state["page"] == "admin":
+    if st.session_state["authenticated"]:
+        show_admin_page()
+    else:
+        st.warning("Você precisa estar logado para acessar esta página.")
+        show_login_page()
 
-# Histórico do chat
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+elif st.session_state["page"] == "chat":
+    # ================================
+    # CHAT PRINCIPAL
+    # ================================
+    st.title("🤖 Chatbot com RAG")
+    st.caption("Faça perguntas sobre os documentos que você indexou.")
 
+    # Histórico do chat
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
 
-# Exibe mensagens
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+    # Exibe mensagens
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
+    # Campo de entrada para o usuário
+    if prompt := st.chat_input("Qual a sua dúvida?"):
+        # Armazena e exibe a mensagem do usuário
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
 
-# Campo de entrada para o usuário
-if prompt := st.chat_input("Qual a sua dúvida?"):
+        # Gera a resposta do modelo RAG
+        with st.chat_message("assistant"):
+            message_placeholder = st.empty()
+            full_response = ""
 
-    # Armazena e exibe a mensagem do usuário
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
+            with st.spinner("Pensando..."):
+                result = rag_service.query_rag(prompt)
 
-    # Gera a resposta do modelo RAG
-    with st.chat_message("assistant"):
-        message_placeholder = st.empty()
-        full_response = ""
+                if result and "answer" in result:
+                    full_response = result["answer"]
+                    st.session_state.messages.append(
+                        {"role": "assistant", "content": full_response}
+                    )
+                else:
+                    full_response = (
+                        "Não foi possível obter uma resposta. "
+                        "Verifique se a API está online e se há documentos indexados."
+                    )
 
-        with st.spinner("Pensando..."):
-            result = rag_service.query_rag(prompt)
-
-            if result and "answer" in result:
-                full_response = result["answer"]
-                st.session_state.messages.append(
-                    {"role": "assistant", "content": full_response}
-                )
-            else:
-                full_response = (
-                    "Não foi possível obter uma resposta. "
-                    "Verifique se a API está online e se há documentos indexados."
-                )
-
-        message_placeholder.markdown(full_response)
+            message_placeholder.markdown(full_response)
