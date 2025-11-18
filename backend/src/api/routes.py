@@ -16,67 +16,85 @@ class QueryRequest(BaseModel):
     k: int = 4
 
 
-# --- Endpoint de upload de Documentos ---
+# --- Endpoint de upload de documentos ---
 @router.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Envie apenas arquivos PDF.")
 
+    # NORMALIZA O NOME DO ARQUIVO (evita problemas no delete)
+    filename = file.filename.strip()
+
     content = await file.read()
-    reader = PdfReader(BytesIO(content))
-    text = "\n".join([p.extract_text() or "" for p in reader.pages])
+
+    try:
+        reader = PdfReader(BytesIO(content))
+        text = "\n".join([page.extract_text() or "" for page in reader.pages])
+    except Exception:
+        raise HTTPException(status_code=400, detail="Erro ao ler PDF. Arquivo pode estar corrompido.")
 
     if not text.strip():
         raise HTTPException(status_code=400, detail="PDF sem texto legível.")
 
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP
+        chunk_size=CHUNK_SIZE,
+        chunk_overlap=CHUNK_OVERLAP
     )
 
+    chunks = splitter.split_text(text)
+
     docs = [
-        Document(page_content=chunk, metadata={"source": file.filename})
-        for chunk in splitter.split_text(text)
+        Document(page_content=chunk, metadata={"source": filename})
+        for chunk in chunks
     ]
 
     add_documents(docs)
-    return {"status": "ok", "chunks": len(docs), "file": file.filename}
+
+    return {
+        "status": "ok",
+        "chunks": len(docs),
+        "file": filename
+    }
 
 
-# --- Endpoint de consulta (RAG) ---
+# --- Endpoint para consulta RAG ---
 @router.post("/query")
 async def query_rag(body: QueryRequest):
-    """
-    Endpoint para fazer uma pergunta ao modelo Gemini usando RAG.
-    """
     try:
         retriever = get_retriever(body.k)
     except ValueError:
         raise HTTPException(status_code=400, detail="Nenhum documento indexado.")
 
-    # Constrói a pipeline RAG
-    rag_pipeline = build_rag_chain(retriever)
+    chain = build_rag_chain(retriever)
+    result = chain(body.question)
 
-    # Executa a pipeline de forma síncrona (Gemini é síncrono, não precisa await)
-    result = rag_pipeline(body.question)
+    context_docs = [
+        {
+            "source": d.get("source"),
+            "content": d.get("content")
+        }
+        for d in result.get("context_docs", [])
+    ]
 
     return {
         "question": body.question,
-        "answer": result["answer"],
-        "context_docs": result["context_docs"]
+        "answer": result.get("answer", ""),
+        "context_docs": context_docs,
     }
 
-# --- Endpoint de consulta de Documentos ---
+
+# --- Endpoint de listagem ---
 @router.get("/files")
 async def list_files():
-    """Lista todos os PDFs carregados"""
     files = list_documents()
     return {"uploaded_pdfs": files}
 
 
-# --- Endpoint de exclusão de Documentos ---
+# --- Endpoint de exclusão ---
 @router.delete("/files/{filename}")
 async def remove_file(filename: str):
-    """Remove um PDF do índice"""
+    filename = filename.strip()
+
     try:
         delete_document(filename)
         return {"status": "deleted", "file": filename}
