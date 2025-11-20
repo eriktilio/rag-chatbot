@@ -1,30 +1,41 @@
 # Usa imagem leve do Python
 FROM python:3.13-slim
 
-# Instala dependências básicas
-RUN apt-get update && apt-get install -y curl build-essential && rm -rf /var/lib/apt/lists/*
+# 1. Instala o 'uv' copiando da imagem oficial
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Instala o Poetry globalmente
-RUN curl -sSL https://install.python-poetry.org | python3 -
+# 2. Instala dependências básicas do sistema
+#RUN apt-get update && apt-get install -y curl build-essential && rm -rf /var/lib/apt/lists/*
 
-# Adiciona o Poetry ao PATH
-ENV PATH="/root/.local/bin:$PATH"
-ENV POETRY_VIRTUALENVS_CREATE=false
+# 3. Configurações de ambiente
 ENV PYTHONUNBUFFERED=1
+ENV UV_COMPILE_BYTECODE=1
+ENV UV_LINK_MODE=copy
+
+# Define o local do ambiente virtual e adiciona ao PATH
+# Isso elimina a necessidade de prefixos como "poetry run" ou "uv run"
+ENV VIRTUAL_ENV=/app/.venv
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 # Define o diretório de trabalho
 WORKDIR /app
 
-# Copia arquivos de configuração primeiro (para aproveitar cache)
-COPY pyproject.toml poetry.lock* ./
+# 4. Copia arquivos de configuração
+# Renomeia o pyproject_uv.toml para o padrão esperado pelo uv
+COPY pyproject_uv.toml pyproject.toml
+COPY uv.lock* ./
 
-# Instala dependências
-RUN poetry install --no-root --no-interaction --no-ansi
+# 5. Instala dependências
+# --no-install-project: Instala apenas as bibliotecas, ignorando o código do projeto por enquanto
+# Sem --frozen pois você ainda não tem o uv.lock gerado
+RUN uv sync --no-dev --no-install-project --no-cache
 
-# Copia o código da aplicação
+# 6. Copia o código da aplicação
 COPY . .
 
+# Expose a porta do FastAPI
 EXPOSE 8000
 
-# Comando final (exemplo para FastAPI)
-CMD ["poetry", "run", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# 7. Comando final
+# Como o ambiente virtual já está no PATH, chamamos 'uvicorn' diretamente
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]

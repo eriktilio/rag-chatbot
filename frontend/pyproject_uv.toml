@@ -1,0 +1,17 @@
+[project]
+name = "rag-chatbot-app"
+version = "0.1.0"
+description = "APP simples de RAG com Streamlit"
+authors = [
+    {name = "eriktilio",email = "erikatiliorey@gmail.com"}
+]
+license = {text = "MIT"}
+readme = "README.md"
+packages = [{ include = "src" }]
+requires-python = ">=3.13"
+dependencies = [
+    "requests (>=2.32.5,<3.0.0)",
+    "streamlit (>=1.51.0,<2.0.0)"
+]
+
+
